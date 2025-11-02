@@ -44,10 +44,6 @@ func handlerValidateChirp(writer http.ResponseWriter, request *http.Request) {
 	} else {
 		respondWithError(writer, "Error: chirp too long", "Chirp is too long", http.StatusBadRequest)
 	}
-	if err != nil {
-		respondWithError(writer, fmt.Sprintf("Error marshalling JSON: %v", err), "Something went wrong", http.StatusInternalServerError)
-		return
-	}
 }
 
 func respondWithError(writer http.ResponseWriter, logMessage string, apiErrorMessage string, statusCode int) {
@@ -70,7 +66,7 @@ func sanitizeText(text string) string {
 	profaneWords := []string{"kerfuffle", "sharbert", "fornax"}
 	splitText := strings.Fields(text)
 
-	for i, _ := range splitText {
+	for i := range splitText {
 		for _, word := range profaneWords {
 			if strings.ToLower(splitText[i]) == word {
 				splitText[i] = "****"
