@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 type validateRequestParams struct {
@@ -15,7 +16,7 @@ type validateResponseErrorParams struct {
 }
 
 type validateResponseOKParams struct {
-	Valid bool `json:"valid"`
+	CleanedBody string `json:"cleaned_body"`
 }
 
 func handlerHealthZ(writer http.ResponseWriter, request *http.Request) {
@@ -29,43 +30,53 @@ func handlerValidateChirp(writer http.ResponseWriter, request *http.Request) {
 	reqParams := validateRequestParams{}
 	err := decoder.Decode(&reqParams)
 	if err != nil {
-		internalServerError(writer, fmt.Sprintf("Failed to decode the request body: %v", err), "Something went wrong")
+		respondWithError(writer, fmt.Sprintf("Failed to decode the request body: %v", err), "Something went wrong", http.StatusInternalServerError)
 		return
 	}
 
 	isValid := len(reqParams.Body) <= 140
 
-	var respData []byte
-	var respCode int
 	if isValid {
 		respBody := validateResponseOKParams{
-			Valid: true,
+			CleanedBody: sanitizeText(reqParams.Body),
 		}
-		respData, err = json.Marshal(respBody)
-		respCode = http.StatusOK
+		respondWithJSON(writer, respBody)
 	} else {
-		respBody := validateResponseErrorParams{
-			Error: "Chirp is too long",
-		}
-		respData, err = json.Marshal(respBody)
-		respCode = http.StatusBadRequest
+		respondWithError(writer, "Error: chirp too long", "Chirp is too long", http.StatusBadRequest)
 	}
 	if err != nil {
-		internalServerError(writer, fmt.Sprintf("Error marshalling JSON: %v", err), "Something went wrong")
+		respondWithError(writer, fmt.Sprintf("Error marshalling JSON: %v", err), "Something went wrong", http.StatusInternalServerError)
 		return
 	}
-
-	writer.Header().Set("Content-Type", "application/json")
-	writer.WriteHeader(respCode)
-	writer.Write(respData)
 }
 
-func internalServerError(writer http.ResponseWriter, logMessage string, apiErrorMessage string) {
-	fmt.Println(logMessage)
+func respondWithError(writer http.ResponseWriter, logMessage string, apiErrorMessage string, statusCode int) {
+	fmt.Printf("[Error]: %v\n", logMessage)
 	writer.Header().Set("Content-Type", "application/json")
-	writer.WriteHeader(http.StatusInternalServerError)
+	writer.WriteHeader(statusCode)
 	respBody := validateResponseErrorParams{
 		Error: apiErrorMessage,
 	}
 	json.NewEncoder(writer).Encode(respBody)
+}
+
+func respondWithJSON(writer http.ResponseWriter, data any) {
+	writer.Header().Set("Content-Type", "application/json")
+	writer.WriteHeader(http.StatusOK)
+	json.NewEncoder(writer).Encode(data)
+}
+
+func sanitizeText(text string) string {
+	profaneWords := []string{"kerfuffle", "sharbert", "fornax"}
+	splitText := strings.Fields(text)
+
+	for i, _ := range splitText {
+		for _, word := range profaneWords {
+			if strings.ToLower(splitText[i]) == word {
+				splitText[i] = "****"
+			}
+		}
+	}
+
+	return strings.Join(splitText, " ")
 }
