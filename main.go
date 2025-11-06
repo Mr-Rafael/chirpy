@@ -1,22 +1,35 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sync/atomic"
+
+	"github.com/Mr-Rafael/chirpy/internal/database"
+	_ "github.com/lib/pq"
 )
 
 type apiConfig struct {
 	fileserverHits atomic.Int32
+	dbQueries      *database.Queries
 }
 
 func main() {
 	port := ":8080"
 	mux := http.NewServeMux()
+	dbURL := os.Getenv("DB_URL")
+
+	db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		log.Fatalf("error opening connection to the database: %v", err)
+	}
 
 	var config apiConfig
 	config.fileserverHits.Store(0)
+	config.dbQueries = database.New(db)
 
 	mux.Handle("/app/", config.middlewareMetricsInc(http.StripPrefix("/app/", http.FileServer(http.Dir("./files")))))
 	mux.HandleFunc("GET /api/healthz", handlerHealthZ)
