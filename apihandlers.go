@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 type validateRequestParams struct {
@@ -17,6 +21,17 @@ type validateResponseErrorParams struct {
 
 type validateResponseOKParams struct {
 	CleanedBody string `json:"cleaned_body"`
+}
+
+type usersRequestParams struct {
+	Email string `json:"email"`
+}
+
+type usersResponseParams struct {
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Email     string    `json:"email"`
 }
 
 func handlerHealthZ(writer http.ResponseWriter, request *http.Request) {
@@ -40,10 +55,38 @@ func handlerValidateChirp(writer http.ResponseWriter, request *http.Request) {
 		respBody := validateResponseOKParams{
 			CleanedBody: sanitizeText(reqParams.Body),
 		}
-		respondWithJSON(writer, respBody)
+		respondWithJSON(writer, respBody, http.StatusOK)
 	} else {
 		respondWithError(writer, "Error: chirp too long", "Chirp is too long", http.StatusBadRequest)
 	}
+}
+
+func (c *apiConfig) handlerUsers(writer http.ResponseWriter, request *http.Request) {
+	decoder := json.NewDecoder(request.Body)
+	reqParams := usersRequestParams{}
+	err := decoder.Decode(&reqParams)
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("Failed to create user: %v", err), "Something went wrong", http.StatusBadRequest)
+		return
+	}
+	if len(reqParams.Email) <= 0 {
+		respondWithError(writer, fmt.Sprintf("The username came empty: %v", err), "Something went wrong", http.StatusBadRequest)
+		return
+	}
+
+	queryResult, err := c.db.CreateUser(context.Background(), reqParams.Email)
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("Failed to save the user to database: %v", err), "Something went wrong", http.StatusInternalServerError)
+		return
+	}
+
+	responseBody := usersResponseParams{
+		ID:        queryResult.ID,
+		CreatedAt: queryResult.CreatedAt,
+		UpdatedAt: queryResult.UpdatedAt,
+		Email:     queryResult.Email,
+	}
+	respondWithJSON(writer, responseBody, http.StatusCreated)
 }
 
 func respondWithError(writer http.ResponseWriter, logMessage string, apiErrorMessage string, statusCode int) {
@@ -56,9 +99,9 @@ func respondWithError(writer http.ResponseWriter, logMessage string, apiErrorMes
 	json.NewEncoder(writer).Encode(respBody)
 }
 
-func respondWithJSON(writer http.ResponseWriter, data any) {
+func respondWithJSON(writer http.ResponseWriter, data any, statusCode int) {
 	writer.Header().Set("Content-Type", "application/json")
-	writer.WriteHeader(http.StatusOK)
+	writer.WriteHeader(statusCode)
 	json.NewEncoder(writer).Encode(data)
 }
 
