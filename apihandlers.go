@@ -40,7 +40,7 @@ func handlerHealthZ(writer http.ResponseWriter, request *http.Request) {
 	writer.Write([]byte("OK"))
 }
 
-func handlerValidateChirp(writer http.ResponseWriter, request *http.Request) {
+func (c *apiConfig) handlerValidateChirp(writer http.ResponseWriter, request *http.Request) {
 	decoder := json.NewDecoder(request.Body)
 	reqParams := validateRequestParams{}
 	err := decoder.Decode(&reqParams)
