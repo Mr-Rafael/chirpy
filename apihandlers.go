@@ -8,19 +8,25 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mr-Rafael/chirpy/internal/database"
 	"github.com/google/uuid"
 )
 
-type validateRequestParams struct {
-	Body string `json:"body"`
+type chirpParams struct {
+	Body   string    `json:"body"`
+	UserID uuid.UUID `json:"user_id"`
 }
 
 type validateResponseErrorParams struct {
 	Error string `json:"error"`
 }
 
-type validateResponseOKParams struct {
-	CleanedBody string `json:"cleaned_body"`
+type chirpResponseOKParams struct {
+	ID        uuid.UUID `json:"id"`
+	CreatedAt string    `json:"created_at"`
+	UpdatedAt string    `json:"updated_at"`
+	Body      string    `json:"body"`
+	UserID    uuid.UUID `json:"user_id"`
 }
 
 type usersRequestParams struct {
@@ -40,25 +46,39 @@ func handlerHealthZ(writer http.ResponseWriter, request *http.Request) {
 	writer.Write([]byte("OK"))
 }
 
-func (c *apiConfig) handlerValidateChirp(writer http.ResponseWriter, request *http.Request) {
+func (c *apiConfig) handlerChirps(writer http.ResponseWriter, request *http.Request) {
 	decoder := json.NewDecoder(request.Body)
-	reqParams := validateRequestParams{}
+	reqParams := chirpParams{}
 	err := decoder.Decode(&reqParams)
 	if err != nil {
-		respondWithError(writer, fmt.Sprintf("Failed to decode the request body: %v", err), "Something went wrong", http.StatusInternalServerError)
+		respondWithError(writer, fmt.Sprintf("Failed to decode the request body: %v", err), "Something went wrong", http.StatusBadRequest)
 		return
 	}
 
 	isValid := len(reqParams.Body) <= 140
 
-	if isValid {
-		respBody := validateResponseOKParams{
-			CleanedBody: sanitizeText(reqParams.Body),
-		}
-		respondWithJSON(writer, respBody, http.StatusOK)
-	} else {
+	if !isValid {
 		respondWithError(writer, "Error: chirp too long", "Chirp is too long", http.StatusBadRequest)
+		return
 	}
+
+	createChirpParams := database.CreateChirpParams{
+		Body:   sanitizeText(reqParams.Body),
+		UserID: reqParams.UserID,
+	}
+	queryResult, err := c.db.CreateChirp(context.Background(), createChirpParams)
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("Error saving chirp on the database: %v", err), "Something went wrong.", http.StatusInternalServerError)
+		return
+	}
+	respBody := chirpResponseOKParams{
+		ID:        queryResult.ID,
+		CreatedAt: queryResult.CreatedAt.Format("2021-01-01T00:00:00Z"),
+		UpdatedAt: queryResult.UpdatedAt.Format("2021-01-01T00:00:00Z"),
+		Body:      queryResult.Body,
+		UserID:    queryResult.UserID,
+	}
+	respondWithJSON(writer, respBody, http.StatusCreated)
 }
 
 func (c *apiConfig) handlerUsers(writer http.ResponseWriter, request *http.Request) {
