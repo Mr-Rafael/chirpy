@@ -46,7 +46,7 @@ func handlerHealthZ(writer http.ResponseWriter, request *http.Request) {
 	writer.Write([]byte("OK"))
 }
 
-func (c *apiConfig) handlerChirps(writer http.ResponseWriter, request *http.Request) {
+func (c *apiConfig) handlerChirpsPOST(writer http.ResponseWriter, request *http.Request) {
 	decoder := json.NewDecoder(request.Body)
 	reqParams := chirpParams{}
 	err := decoder.Decode(&reqParams)
@@ -79,6 +79,25 @@ func (c *apiConfig) handlerChirps(writer http.ResponseWriter, request *http.Requ
 		UserID:    queryResult.UserID,
 	}
 	respondWithJSON(writer, respBody, http.StatusCreated)
+}
+
+func (c *apiConfig) handlerChirpsGET(writer http.ResponseWriter, request *http.Request) {
+	queryResult, err := c.db.GetChirps(context.Background())
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("Error getting chirps from database: %v", err), "Something went wrong", http.StatusInternalServerError)
+	}
+	var responseData []chirpResponseOKParams
+	for _, chirp := range queryResult {
+		chirpData := chirpResponseOKParams{
+			ID:        chirp.ID,
+			CreatedAt: chirp.CreatedAt.Format("2021-01-01T00:00:00Z"),
+			UpdatedAt: chirp.UpdatedAt.Format("2021-01-01T00:00:00Z"),
+			Body:      chirp.Body,
+			UserID:    chirp.UserID,
+		}
+		responseData = append(responseData, chirpData)
+	}
+	respondWithJSON(writer, responseData, http.StatusOK)
 }
 
 func (c *apiConfig) handlerUsers(writer http.ResponseWriter, request *http.Request) {
