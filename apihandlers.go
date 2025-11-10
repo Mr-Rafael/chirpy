@@ -100,6 +100,28 @@ func (c *apiConfig) handlerChirpsGET(writer http.ResponseWriter, request *http.R
 	respondWithJSON(writer, responseData, http.StatusOK)
 }
 
+func (c *apiConfig) handlerChirpsGETID(writer http.ResponseWriter, request *http.Request) {
+	chirpID, err := uuid.Parse(request.PathValue("chirp_id"))
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("Failed to parse the chirp id: %v", err), "Invalid Chirp ID", http.StatusNotFound)
+		return
+	}
+
+	queryResult, err := c.db.GetChirp(context.Background(), chirpID)
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("Error getting chirps from database: %v", err), "Chirp not found", http.StatusNotFound)
+		return
+	}
+	responseData := chirpResponseOKParams{
+		ID:        queryResult.ID,
+		CreatedAt: queryResult.CreatedAt.Format("2021-01-01T00:00:00Z"),
+		UpdatedAt: queryResult.UpdatedAt.Format("2021-01-01T00:00:00Z"),
+		Body:      queryResult.Body,
+		UserID:    queryResult.UserID,
+	}
+	respondWithJSON(writer, responseData, http.StatusOK)
+}
+
 func (c *apiConfig) handlerUsers(writer http.ResponseWriter, request *http.Request) {
 	decoder := json.NewDecoder(request.Body)
 	reqParams := usersRequestParams{}
