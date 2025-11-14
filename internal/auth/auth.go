@@ -4,6 +4,10 @@ import (
 	"fmt"
 	"time"
 
+	"crypto/rand"
+
+	"encoding/base64"
+
 	"github.com/alexedwards/argon2id"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -59,4 +63,13 @@ func ValidateJWT(tokenString string, tokenSecret string) (uuid.UUID, error) {
 	}
 
 	return returnUUID, nil
+}
+
+func GenerateSecretKeyHS256() (string, error) {
+	key := make([]byte, 32)
+	_, err := rand.Read(key)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate secret key: %v", err)
+	}
+	return base64.URLEncoding.EncodeToString(key), nil
 }
