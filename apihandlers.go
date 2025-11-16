@@ -14,8 +14,7 @@ import (
 )
 
 type chirpParams struct {
-	Body   string    `json:"body"`
-	UserID uuid.UUID `json:"user_id"`
+	Body string `json:"body"`
 }
 
 type validateResponseErrorParams struct {
@@ -71,6 +70,21 @@ func (c *apiConfig) handlerChirpsPOST(writer http.ResponseWriter, request *http.
 		return
 	}
 
+	bearerToken, err := auth.GetBearerToken(request.Header)
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("Failed to get bearer from request: %v", err), "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	jwt_user_id, err := auth.ValidateJWT(bearerToken, c.secret)
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("Error validating JWT: %v", err), "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if jwt_user_id == uuid.Nil {
+		respondWithError(writer, fmt.Sprintf("Error validating JWT: %v", err), "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	isValid := len(reqParams.Body) <= 140
 
 	if !isValid {
@@ -80,7 +94,7 @@ func (c *apiConfig) handlerChirpsPOST(writer http.ResponseWriter, request *http.
 
 	createChirpParams := database.CreateChirpParams{
 		Body:   sanitizeText(reqParams.Body),
-		UserID: reqParams.UserID,
+		UserID: jwt_user_id,
 	}
 	queryResult, err := c.db.CreateChirp(context.Background(), createChirpParams)
 	if err != nil {
@@ -220,7 +234,8 @@ func (c *apiConfig) handlerLogin(writer http.ResponseWriter, request *http.Reque
 
 	return_jwt, err := auth.MakeJWT(userData.ID, c.secret, expires_in_seconds)
 	if err != nil {
-		respondWithError(writer, fmt.Sprintf("Failed to generate JWT for user: %v"), "Something went wrong.", http.StatusInternalServerError)
+		respondWithError(writer, fmt.Sprintf("Failed to generate JWT for user: %v", err), "Something went wrong.", http.StatusInternalServerError)
+		return
 	}
 
 	responseParams := loginResponseParams{
