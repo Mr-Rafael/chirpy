@@ -17,6 +17,7 @@ type apiConfig struct {
 	fileserverHits atomic.Int32
 	db             *database.Queries
 	platform       string
+	secret         string
 }
 
 func main() {
@@ -34,6 +35,7 @@ func main() {
 	config.fileserverHits.Store(0)
 	config.db = database.New(db)
 	config.platform = os.Getenv("PLATFORM")
+	config.secret = os.Getenv("SECRET")
 
 	mux.Handle("/app/", config.middlewareMetricsInc(http.StripPrefix("/app/", http.FileServer(http.Dir("./files")))))
 	mux.HandleFunc("GET /api/healthz", handlerHealthZ)

@@ -36,8 +36,9 @@ type usersRequestParams struct {
 }
 
 type loginRequestParams struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email            string `json:"email"`
+	Password         string `json:"password"`
+	ExpiresInSeconds *int   `json:"expires_in_seconds,omitempty"`
 }
 
 type usersResponseParams struct {
@@ -45,6 +46,14 @@ type usersResponseParams struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Email     string    `json:"email"`
+}
+
+type loginResponseParams struct {
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Email     string    `json:"email"`
+	Token     string    `json:"token"`
 }
 
 func handlerHealthZ(writer http.ResponseWriter, request *http.Request) {
@@ -172,7 +181,7 @@ func (c *apiConfig) handlerUsers(writer http.ResponseWriter, request *http.Reque
 
 func (c *apiConfig) handlerLogin(writer http.ResponseWriter, request *http.Request) {
 	decoder := json.NewDecoder(request.Body)
-	reqParams := usersRequestParams{}
+	reqParams := loginRequestParams{}
 	err := decoder.Decode(&reqParams)
 	if err != nil {
 		respondWithError(writer, fmt.Sprintf("Failed to create user: %v", err), "Something went wrong", http.StatusBadRequest)
@@ -185,6 +194,12 @@ func (c *apiConfig) handlerLogin(writer http.ResponseWriter, request *http.Reque
 	if len(reqParams.Password) <= 0 {
 		respondWithError(writer, "The password came empty.", "Missing param: password", http.StatusBadRequest)
 		return
+	}
+	var expires_in_seconds time.Duration
+	if reqParams.ExpiresInSeconds == nil {
+		expires_in_seconds = 1 * time.Hour
+	} else {
+		expires_in_seconds = time.Duration(*reqParams.ExpiresInSeconds) * time.Second
 	}
 
 	userData, err := c.db.GetUser(context.Background(), reqParams.Email)
@@ -203,11 +218,17 @@ func (c *apiConfig) handlerLogin(writer http.ResponseWriter, request *http.Reque
 		return
 	}
 
-	responseParams := usersResponseParams{
+	return_jwt, err := auth.MakeJWT(userData.ID, c.secret, expires_in_seconds)
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("Failed to generate JWT for user: %v"), "Something went wrong.", http.StatusInternalServerError)
+	}
+
+	responseParams := loginResponseParams{
 		ID:        userData.ID,
 		Email:     userData.Email,
 		CreatedAt: userData.CreatedAt,
 		UpdatedAt: userData.UpdatedAt,
+		Token:     return_jwt,
 	}
 	respondWithJSON(writer, responseParams, http.StatusOK)
 }

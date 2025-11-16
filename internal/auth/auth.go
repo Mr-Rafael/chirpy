@@ -2,6 +2,8 @@ package auth
 
 import (
 	"fmt"
+	"net/http"
+	"strings"
 	"time"
 
 	"crypto/rand"
@@ -72,4 +74,13 @@ func GenerateSecretKeyHS256() (string, error) {
 		return "", fmt.Errorf("failed to generate secret key: %v", err)
 	}
 	return base64.URLEncoding.EncodeToString(key), nil
+}
+
+func GetBearerToken(headers http.Header) (string, error) {
+	bearer := headers.Get("Authorization")
+	if bearer == "" {
+		return "", fmt.Errorf("failed to extract authorization header")
+	}
+	jwt_token := strings.TrimPrefix(bearer, "Bearer ")
+	return jwt_token, nil
 }
