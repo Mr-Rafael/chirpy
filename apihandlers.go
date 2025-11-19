@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/Mr-Rafael/chirpy/internal/auth"
@@ -13,20 +12,8 @@ import (
 	"github.com/google/uuid"
 )
 
-type chirpParams struct {
-	Body string `json:"body"`
-}
-
 type validateResponseErrorParams struct {
 	Error string `json:"error"`
-}
-
-type chirpResponseOKParams struct {
-	ID        uuid.UUID `json:"id"`
-	CreatedAt string    `json:"created_at"`
-	UpdatedAt string    `json:"updated_at"`
-	Body      string    `json:"body"`
-	UserID    uuid.UUID `json:"user_id"`
 }
 
 type usersRequestParams struct {
@@ -35,9 +22,8 @@ type usersRequestParams struct {
 }
 
 type loginRequestParams struct {
-	Email            string `json:"email"`
-	Password         string `json:"password"`
-	ExpiresInSeconds *int   `json:"expires_in_seconds,omitempty"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
 type usersResponseParams struct {
@@ -48,108 +34,18 @@ type usersResponseParams struct {
 }
 
 type loginResponseParams struct {
-	ID        uuid.UUID `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Email     string    `json:"email"`
-	Token     string    `json:"token"`
+	ID           uuid.UUID `json:"id"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+	Email        string    `json:"email"`
+	Token        string    `json:"token"`
+	RefreshToken string    `json:"refresh_token"`
 }
 
 func handlerHealthZ(writer http.ResponseWriter, request *http.Request) {
 	writer.WriteHeader(http.StatusOK)
 	writer.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	writer.Write([]byte("OK"))
-}
-
-func (c *apiConfig) handlerChirpsPOST(writer http.ResponseWriter, request *http.Request) {
-	decoder := json.NewDecoder(request.Body)
-	reqParams := chirpParams{}
-	err := decoder.Decode(&reqParams)
-	if err != nil {
-		respondWithError(writer, fmt.Sprintf("Failed to decode the request body: %v", err), "Something went wrong", http.StatusBadRequest)
-		return
-	}
-
-	bearerToken, err := auth.GetBearerToken(request.Header)
-	if err != nil {
-		respondWithError(writer, fmt.Sprintf("Failed to get bearer from request: %v", err), "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-	jwt_user_id, err := auth.ValidateJWT(bearerToken, c.secret)
-	if err != nil {
-		respondWithError(writer, fmt.Sprintf("Error validating JWT: %v", err), "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-	if jwt_user_id == uuid.Nil {
-		respondWithError(writer, fmt.Sprintf("Error validating JWT: %v", err), "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	isValid := len(reqParams.Body) <= 140
-
-	if !isValid {
-		respondWithError(writer, "Error: chirp too long", "Chirp is too long", http.StatusBadRequest)
-		return
-	}
-
-	createChirpParams := database.CreateChirpParams{
-		Body:   sanitizeText(reqParams.Body),
-		UserID: jwt_user_id,
-	}
-	queryResult, err := c.db.CreateChirp(context.Background(), createChirpParams)
-	if err != nil {
-		respondWithError(writer, fmt.Sprintf("Error saving chirp on the database: %v", err), "Something went wrong.", http.StatusInternalServerError)
-		return
-	}
-	respBody := chirpResponseOKParams{
-		ID:        queryResult.ID,
-		CreatedAt: queryResult.CreatedAt.Format("2021-01-01T00:00:00Z"),
-		UpdatedAt: queryResult.UpdatedAt.Format("2021-01-01T00:00:00Z"),
-		Body:      queryResult.Body,
-		UserID:    queryResult.UserID,
-	}
-	respondWithJSON(writer, respBody, http.StatusCreated)
-}
-
-func (c *apiConfig) handlerChirpsGET(writer http.ResponseWriter, request *http.Request) {
-	queryResult, err := c.db.GetChirps(context.Background())
-	if err != nil {
-		respondWithError(writer, fmt.Sprintf("Error getting chirps from database: %v", err), "Something went wrong", http.StatusInternalServerError)
-	}
-	var responseData []chirpResponseOKParams
-	for _, chirp := range queryResult {
-		chirpData := chirpResponseOKParams{
-			ID:        chirp.ID,
-			CreatedAt: chirp.CreatedAt.Format("2021-01-01T00:00:00Z"),
-			UpdatedAt: chirp.UpdatedAt.Format("2021-01-01T00:00:00Z"),
-			Body:      chirp.Body,
-			UserID:    chirp.UserID,
-		}
-		responseData = append(responseData, chirpData)
-	}
-	respondWithJSON(writer, responseData, http.StatusOK)
-}
-
-func (c *apiConfig) handlerChirpsGETID(writer http.ResponseWriter, request *http.Request) {
-	chirpID, err := uuid.Parse(request.PathValue("chirp_id"))
-	if err != nil {
-		respondWithError(writer, fmt.Sprintf("Failed to parse the chirp id: %v", err), "Invalid Chirp ID", http.StatusNotFound)
-		return
-	}
-
-	queryResult, err := c.db.GetChirp(context.Background(), chirpID)
-	if err != nil {
-		respondWithError(writer, fmt.Sprintf("Error getting chirps from database: %v", err), "Chirp not found", http.StatusNotFound)
-		return
-	}
-	responseData := chirpResponseOKParams{
-		ID:        queryResult.ID,
-		CreatedAt: queryResult.CreatedAt.Format("2021-01-01T00:00:00Z"),
-		UpdatedAt: queryResult.UpdatedAt.Format("2021-01-01T00:00:00Z"),
-		Body:      queryResult.Body,
-		UserID:    queryResult.UserID,
-	}
-	respondWithJSON(writer, responseData, http.StatusOK)
 }
 
 func (c *apiConfig) handlerUsers(writer http.ResponseWriter, request *http.Request) {
@@ -209,12 +105,6 @@ func (c *apiConfig) handlerLogin(writer http.ResponseWriter, request *http.Reque
 		respondWithError(writer, "The password came empty.", "Missing param: password", http.StatusBadRequest)
 		return
 	}
-	var expires_in_seconds time.Duration
-	if reqParams.ExpiresInSeconds == nil {
-		expires_in_seconds = 1 * time.Hour
-	} else {
-		expires_in_seconds = time.Duration(*reqParams.ExpiresInSeconds) * time.Second
-	}
 
 	userData, err := c.db.GetUser(context.Background(), reqParams.Email)
 	if err != nil {
@@ -232,18 +122,34 @@ func (c *apiConfig) handlerLogin(writer http.ResponseWriter, request *http.Reque
 		return
 	}
 
-	return_jwt, err := auth.MakeJWT(userData.ID, c.secret, expires_in_seconds)
+	return_jwt, err := auth.MakeJWT(userData.ID, c.secret, 1*time.Hour)
 	if err != nil {
 		respondWithError(writer, fmt.Sprintf("Failed to generate JWT for user: %v", err), "Something went wrong.", http.StatusInternalServerError)
 		return
 	}
+	refresh_token, err := auth.GenerateSecretKeyHS256()
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("Failed to generate refresh token for user: %v", err), "Something went wrong.", http.StatusInternalServerError)
+		return
+	}
+	create_refresh_token_params := database.CreateRefreshTokenParams{
+		Token:     refresh_token,
+		UserID:    userData.ID,
+		ExpiresAt: time.Now().Add(time.Duration(24 * 60 * time.Hour)),
+	}
+	_, err = c.db.CreateRefreshToken(context.Background(), create_refresh_token_params)
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("Failed to save the refresh token to the database: %v", err), "Something went wrong.", http.StatusInternalServerError)
+		return
+	}
 
 	responseParams := loginResponseParams{
-		ID:        userData.ID,
-		Email:     userData.Email,
-		CreatedAt: userData.CreatedAt,
-		UpdatedAt: userData.UpdatedAt,
-		Token:     return_jwt,
+		ID:           userData.ID,
+		Email:        userData.Email,
+		CreatedAt:    userData.CreatedAt,
+		UpdatedAt:    userData.UpdatedAt,
+		Token:        return_jwt,
+		RefreshToken: refresh_token,
 	}
 	respondWithJSON(writer, responseParams, http.StatusOK)
 }
@@ -262,19 +168,4 @@ func respondWithJSON(writer http.ResponseWriter, data any, statusCode int) {
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(statusCode)
 	json.NewEncoder(writer).Encode(data)
-}
-
-func sanitizeText(text string) string {
-	profaneWords := []string{"kerfuffle", "sharbert", "fornax"}
-	splitText := strings.Fields(text)
-
-	for i := range splitText {
-		for _, word := range profaneWords {
-			if strings.ToLower(splitText[i]) == word {
-				splitText[i] = "****"
-			}
-		}
-	}
-
-	return strings.Join(splitText, " ")
 }
