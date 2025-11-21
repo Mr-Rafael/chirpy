@@ -94,3 +94,12 @@ func (q *Queries) GetChirps(ctx context.Context) ([]Chirp, error) {
 	}
 	return items, nil
 }
+
+const resetChirps = `-- name: ResetChirps :exec
+DELETE FROM chirps
+`
+
+func (q *Queries) ResetChirps(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, resetChirps)
+	return err
+}

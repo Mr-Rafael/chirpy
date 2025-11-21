@@ -14,3 +14,12 @@ RETURNING *;
 SELECT *
 FROM refresh_tokens
 WHERE $1 = token;
+
+-- name: RevokeRefreshToken :exec
+UPDATE refresh_tokens
+SET revoked_at = NOW(),
+    updated_at = NOW()
+WHERE $1 = token;
+
+-- name: ResetRefreshTokens :exec
+DELETE FROM refresh_tokens;

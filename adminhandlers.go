@@ -36,4 +36,12 @@ func (cfg *apiConfig) handlerReset(writer http.ResponseWriter, request *http.Req
 	if err != nil {
 		respondWithError(writer, fmt.Sprintf("Failed to reset the users table: %v", err), "Something went wrong.", http.StatusInternalServerError)
 	}
+	err = cfg.db.ResetChirps(context.Background())
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("Failed to reset the chirps table: %v", err), "Something went wrong.", http.StatusInternalServerError)
+	}
+	err = cfg.db.ResetRefreshTokens(context.Background())
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("Failed to reset the refresh tokens table: %v", err), "Something went wrong.", http.StatusInternalServerError)
+	}
 }

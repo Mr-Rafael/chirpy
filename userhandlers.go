@@ -22,10 +22,6 @@ type loginRequestParams struct {
 	Password string `json:"password"`
 }
 
-type refreshRequestParams struct {
-	Token string `json:"token"`
-}
-
 type usersResponseParams struct {
 	ID        uuid.UUID `json:"id"`
 	CreatedAt time.Time `json:"created_at"`
@@ -40,6 +36,10 @@ type loginResponseParams struct {
 	Email        string    `json:"email"`
 	Token        string    `json:"token"`
 	RefreshToken string    `json:"refresh_token"`
+}
+
+type refreshResponseParams struct {
+	Token string `json:"token"`
 }
 
 func (c *apiConfig) handlerUsers(writer http.ResponseWriter, request *http.Request) {
@@ -146,4 +146,59 @@ func (c *apiConfig) handlerLogin(writer http.ResponseWriter, request *http.Reque
 		RefreshToken: refresh_token,
 	}
 	respondWithJSON(writer, responseParams, http.StatusOK)
+}
+
+func (c *apiConfig) handlerRefresh(writer http.ResponseWriter, request *http.Request) {
+	refreshToken, err := auth.GetBearerToken(request.Header)
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("Failed to get bearer from request: %v", err), "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if len(refreshToken) <= 0 {
+		respondWithError(writer, "Failed to get bearer from request.", "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	tokenData, err := c.db.GetRefreshToken(context.Background(), refreshToken)
+	if err != nil {
+		respondWithError(writer, "The refresh token wasn't found on the database.", "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if tokenData.ExpiresAt.Before(time.Now()) {
+		respondWithError(writer, fmt.Sprintf("The refresh token expired on %v", tokenData.ExpiresAt), "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if tokenData.RevokedAt.Valid {
+		respondWithError(writer, fmt.Sprintf("The refresh token was revoked on %v", tokenData.RevokedAt), "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	return_jwt, err := auth.MakeJWT(tokenData.UserID, c.secret, 1*time.Hour)
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("Failed to generate JWT for user: %v", err), "Something went wrong.", http.StatusInternalServerError)
+		return
+	}
+
+	responseParams := refreshResponseParams{
+		Token: return_jwt,
+	}
+	respondWithJSON(writer, responseParams, http.StatusOK)
+}
+
+func (c *apiConfig) handlerRevoke(writer http.ResponseWriter, request *http.Request) {
+	refreshToken, err := auth.GetBearerToken(request.Header)
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("Failed to get bearer from request: %v", err), "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if len(refreshToken) <= 0 {
+		respondWithError(writer, "Failed to get bearer from request.", "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	err = c.db.RevokeRefreshToken(context.Background(), refreshToken)
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("Failed to revoke the token: %v", err), "Something went wrong.", http.StatusInternalServerError)
+	}
+	writer.WriteHeader(http.StatusNoContent)
 }
