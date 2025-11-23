@@ -202,3 +202,61 @@ func (c *apiConfig) handlerRevoke(writer http.ResponseWriter, request *http.Requ
 	}
 	writer.WriteHeader(http.StatusNoContent)
 }
+
+func (c *apiConfig) handlerUsersPUT(writer http.ResponseWriter, request *http.Request) {
+	decoder := json.NewDecoder(request.Body)
+	reqParams := usersRequestParams{}
+	err := decoder.Decode(&reqParams)
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("Failed to decode the request: %v", err), "Something went wrong", http.StatusBadRequest)
+		return
+	}
+	if len(reqParams.Email) <= 0 {
+		respondWithError(writer, fmt.Sprintf("The username came empty: %v", err), "Missing param: email", http.StatusBadRequest)
+		return
+	}
+	if len(reqParams.Password) <= 0 {
+		respondWithError(writer, fmt.Sprintf("The password came empty: %v", err), "Missing param: password", http.StatusBadRequest)
+		return
+	}
+
+	bearerToken, err := auth.GetBearerToken(request.Header)
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("Failed to get bearer from request: %v", err), "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	jwt_user_id, err := auth.ValidateJWT(bearerToken, c.secret)
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("Error validating JWT: %v", err), "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if jwt_user_id == uuid.Nil {
+		respondWithError(writer, fmt.Sprintf("Error validating JWT: %v", err), "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	hashedPassword, err := auth.HashPassword(reqParams.Password)
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("failed to hash the password: %v", err), "Something went wrong", http.StatusInternalServerError)
+		return
+	}
+
+	queryParams := database.UpdateUserParams{
+		ID:             jwt_user_id,
+		Email:          reqParams.Email,
+		HashedPassword: hashedPassword,
+	}
+	queryResult, err := c.db.UpdateUser(context.Background(), queryParams)
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("Failed to save the user to database: %v", err), "Something went wrong", http.StatusInternalServerError)
+		return
+	}
+
+	responseBody := usersResponseParams{
+		ID:        queryResult.ID,
+		CreatedAt: queryResult.CreatedAt,
+		UpdatedAt: queryResult.UpdatedAt,
+		Email:     queryResult.Email,
+	}
+	respondWithJSON(writer, responseBody, http.StatusOK)
+}
