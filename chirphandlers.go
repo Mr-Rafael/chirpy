@@ -129,3 +129,43 @@ func sanitizeText(text string) string {
 
 	return strings.Join(splitText, " ")
 }
+
+func (c *apiConfig) handlerChirpsDELETE(writer http.ResponseWriter, request *http.Request) {
+	chirpID, err := uuid.Parse(request.PathValue("chirp_id"))
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("The Chirp ID was not specified: %v", err), "Invalid Chirp ID", http.StatusNotFound)
+		return
+	}
+
+	bearerToken, err := auth.GetBearerToken(request.Header)
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("Failed to get bearer from request: %v", err), "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	jwt_user_id, err := auth.ValidateJWT(bearerToken, c.secret)
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("Error validating JWT: %v", err), "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if jwt_user_id == uuid.Nil {
+		respondWithError(writer, fmt.Sprintf("Error validating JWT: %v", err), "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	chirpData, err := c.db.GetChirp(context.Background(), chirpID)
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("Error fetching the Chirp from the database: %v", err), "Something went wrong.", http.StatusNotFound)
+		return
+	}
+	if chirpData.UserID != jwt_user_id {
+		respondWithError(writer, "The Chirp's User ID doesn't match the JWT User ID.", "Unauthorized.", http.StatusForbidden)
+		return
+	}
+
+	err = c.db.DeleteChirp(context.Background(), chirpID)
+	if err != nil {
+		respondWithError(writer, fmt.Sprintf("Error saving chirp on the database: %v", err), "Something went wrong.", http.StatusInternalServerError)
+		return
+	}
+	writer.WriteHeader(http.StatusNoContent)
+}
