@@ -23,10 +23,11 @@ type loginRequestParams struct {
 }
 
 type usersResponseParams struct {
-	ID        uuid.UUID `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Email     string    `json:"email"`
+	ID          uuid.UUID `json:"id"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	Email       string    `json:"email"`
+	IsChirpyRed bool      `json:"is_chirpy_red"`
 }
 
 type loginResponseParams struct {
@@ -34,6 +35,7 @@ type loginResponseParams struct {
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 	Email        string    `json:"email"`
+	IsChirpyRed  bool      `json:"is_chirpy_red"`
 	Token        string    `json:"token"`
 	RefreshToken string    `json:"refresh_token"`
 }
@@ -75,10 +77,11 @@ func (c *apiConfig) handlerUsers(writer http.ResponseWriter, request *http.Reque
 	}
 
 	responseBody := usersResponseParams{
-		ID:        queryResult.ID,
-		CreatedAt: queryResult.CreatedAt,
-		UpdatedAt: queryResult.UpdatedAt,
-		Email:     queryResult.Email,
+		ID:          queryResult.ID,
+		CreatedAt:   queryResult.CreatedAt,
+		UpdatedAt:   queryResult.UpdatedAt,
+		Email:       queryResult.Email,
+		IsChirpyRed: queryResult.IsChirpyRed,
 	}
 	respondWithJSON(writer, responseBody, http.StatusCreated)
 }
@@ -142,6 +145,7 @@ func (c *apiConfig) handlerLogin(writer http.ResponseWriter, request *http.Reque
 		Email:        userData.Email,
 		CreatedAt:    userData.CreatedAt,
 		UpdatedAt:    userData.UpdatedAt,
+		IsChirpyRed:  userData.IsChirpyRed,
 		Token:        return_jwt,
 		RefreshToken: refresh_token,
 	}
@@ -253,10 +257,11 @@ func (c *apiConfig) handlerUsersPUT(writer http.ResponseWriter, request *http.Re
 	}
 
 	responseBody := usersResponseParams{
-		ID:        queryResult.ID,
-		CreatedAt: queryResult.CreatedAt,
-		UpdatedAt: queryResult.UpdatedAt,
-		Email:     queryResult.Email,
+		ID:          queryResult.ID,
+		CreatedAt:   queryResult.CreatedAt,
+		UpdatedAt:   queryResult.UpdatedAt,
+		Email:       queryResult.Email,
+		IsChirpyRed: queryResult.IsChirpyRed,
 	}
 	respondWithJSON(writer, responseBody, http.StatusOK)
 }
