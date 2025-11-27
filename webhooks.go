@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/Mr-Rafael/chirpy/internal/auth"
 	"github.com/google/uuid"
 )
 
@@ -30,6 +31,14 @@ func (c *apiConfig) handlerPolkaWebhook(writer http.ResponseWriter, request *htt
 		fmt.Println("Received an event that is not 'user.upgraded'. Ignoring the request.")
 		writer.WriteHeader(http.StatusNoContent)
 		return
+	}
+
+	headerKey, err := auth.GetAPIKey(request.Header)
+	if err != nil {
+		writer.WriteHeader(http.StatusUnauthorized)
+	}
+	if headerKey != c.polkaKey {
+		writer.WriteHeader(http.StatusUnauthorized)
 	}
 
 	err = c.db.UpgradeUser(context.Background(), reqParams.Data.UserID)
