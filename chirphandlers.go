@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/Mr-Rafael/chirpy/internal/auth"
@@ -64,10 +65,11 @@ func (c *apiConfig) handlerChirpsPOST(writer http.ResponseWriter, request *http.
 		respondWithError(writer, fmt.Sprintf("Error saving chirp on the database: %v", err), "Something went wrong.", http.StatusInternalServerError)
 		return
 	}
+
 	respBody := chirpResponseOKParams{
 		ID:        queryResult.ID,
-		CreatedAt: queryResult.CreatedAt.Format("2021-01-01T00:00:00Z"),
-		UpdatedAt: queryResult.UpdatedAt.Format("2021-01-01T00:00:00Z"),
+		CreatedAt: queryResult.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		UpdatedAt: queryResult.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 		Body:      queryResult.Body,
 		UserID:    queryResult.UserID,
 	}
@@ -75,16 +77,34 @@ func (c *apiConfig) handlerChirpsPOST(writer http.ResponseWriter, request *http.
 }
 
 func (c *apiConfig) handlerChirpsGET(writer http.ResponseWriter, request *http.Request) {
-	queryResult, err := c.db.GetChirps(context.Background())
+	authorID := request.URL.Query().Get("author_id")
+	sortOrder := request.URL.Query().Get("sort")
+
+	var queryResult []database.Chirp
+
+	authorUUID, err := uuid.Parse(authorID)
+	if err != nil || len(authorUUID) == 0 {
+		queryResult, err = c.db.GetChirps(context.Background())
+	} else {
+		queryResult, err = c.db.GetChirpsByUser(context.Background(), authorUUID)
+	}
 	if err != nil {
 		respondWithError(writer, fmt.Sprintf("Error getting chirps from database: %v", err), "Something went wrong", http.StatusInternalServerError)
 	}
+
+	switch sortOrder {
+	case "asc":
+		sort.Slice(queryResult, func(i, j int) bool { return queryResult[i].CreatedAt.Before(queryResult[j].CreatedAt) })
+	case "desc":
+		sort.Slice(queryResult, func(i, j int) bool { return queryResult[i].CreatedAt.After(queryResult[j].CreatedAt) })
+	}
+
 	var responseData []chirpResponseOKParams
 	for _, chirp := range queryResult {
 		chirpData := chirpResponseOKParams{
 			ID:        chirp.ID,
-			CreatedAt: chirp.CreatedAt.Format("2021-01-01T00:00:00Z"),
-			UpdatedAt: chirp.UpdatedAt.Format("2021-01-01T00:00:00Z"),
+			CreatedAt: chirp.CreatedAt.Format("2006-01-02T15:04:05Z"),
+			UpdatedAt: chirp.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 			Body:      chirp.Body,
 			UserID:    chirp.UserID,
 		}
@@ -107,8 +127,8 @@ func (c *apiConfig) handlerChirpsGETID(writer http.ResponseWriter, request *http
 	}
 	responseData := chirpResponseOKParams{
 		ID:        queryResult.ID,
-		CreatedAt: queryResult.CreatedAt.Format("2021-01-01T00:00:00Z"),
-		UpdatedAt: queryResult.UpdatedAt.Format("2021-01-01T00:00:00Z"),
+		CreatedAt: queryResult.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		UpdatedAt: queryResult.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 		Body:      queryResult.Body,
 		UserID:    queryResult.UserID,
 	}
